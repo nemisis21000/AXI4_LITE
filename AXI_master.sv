@@ -5,6 +5,8 @@
 module AXI_master(
 	input ACLK, 
 	input ARESETn,
+	input r_en,
+	input w_en,
 			// ADDRESS WRITE CHANNEL
 	input	AWREADY,
 	output reg	AWVALID,
@@ -35,9 +37,6 @@ module AXI_master(
 	output	reg [31:0] data_out 
 );
 
-	//creating the master's local ram of 4096 Bytes(4 KB).
-reg	[7:0] read_mem [4095:0];
-
 
 //////////////////////////////////// WRITE ADDRESS CHANNEL MASTER//////////////////////////////////
 //////////////////////////////// VARIABLES FOR WRITE ADDRESS MASTER ////////////////////////////////////
@@ -58,7 +57,7 @@ always@(posedge ACLK or negedge ARESETn)
 always@*
 	case(WAState_M)
 
-	WA_IDLE_M : 	if(awaddr > 32'h0)	begin WANext_state_M = WA_VALID_M; $display("WA_IDLE_M to WA_VALID_M %t",$time); end
+	WA_IDLE_M : 	if(w_en)       	    begin WANext_state_M = WA_VALID_M; $display("WA_IDLE_M to WA_VALID_M %t",$time); end
     				else				begin WANext_state_M = WA_IDLE_M;  $display("Back to WA_IDLE_M from WA_IDLE_M %t",$time); end
 
 	WA_VALID_M:		if(AWREADY)			begin WANext_state_M = WA_ADDR_M;  $display("WA_VALID_M to WA_ADDR_M%t",$time); end
@@ -79,16 +78,16 @@ always@(posedge ACLK or negedge ARESETn)
     else		 		
 		case (WANext_state_M)
 
-		WA_IDLE_M  :  AWVALID <= 1'B0;
+		WA_IDLE_M  :        AWVALID <= 1'B0;
 
 		WA_VALID_M :  begin AWVALID <= 1'B1;
     						AWADDR  <= awaddr; end
 
-		WA_ADDR_M  :  AWVALID <= 1'B0;
+		WA_ADDR_M  :        AWVALID <= 1'B0;
 
-		WA_WAIT_M  :  AWVALID <= 1'B0;
+		WA_WAIT_M  :        AWVALID <= 1'B0;
 
-		default    :  AWVALID <= 1'B0;
+		default    :        AWVALID <= 1'B0;
 
 		endcase	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -114,7 +113,7 @@ always@*
 
     case(WState_M)
 
-	W_IDLE_M  :  			WNext_state_M = W_GET_M;
+	W_IDLE_M  : if(w_en)    WNext_state_M = W_GET_M;
 
 	W_GET_M   :	if(AWREADY) WNext_state_M = W_WAIT_M;
 				else		WNext_state_M = W_GET_M;
@@ -186,7 +185,7 @@ always@*
 
 always@(posedge ACLK or negedge ARESETn)
 
-	if(!ARESETn)						BREADY <= 1'B0;
+	if(!ARESETn)					BREADY <= 1'B0;
 	else
 	   case(BNext_state_M)
 

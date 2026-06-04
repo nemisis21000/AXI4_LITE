@@ -3,6 +3,7 @@
 `timescale 1ns/1ns
 module AXI_top #(parameter WIDTH=32) 
 				   (input                   ACLK, ARESETn,
+				    input                   r_en,w_en,
 				    input   [    WIDTH-1:0] awaddr,
 					input	[(WIDTH/8)-1:0] wstrb,
 					input	[    WIDTH-1:0] wdata,
@@ -41,7 +42,9 @@ module AXI_top #(parameter WIDTH=32)
 
 					
 //////////////// AXI MASTER
-		AXI_master mstr (
+		AXI_master mstr (    
+		                    .r_en(r_en),
+		                    .w_en(w_en),
 							.awaddr(awaddr),
 							.wstrb(wstrb),
 							.wdata(wdata),
