@@ -63,82 +63,83 @@ endgenerate
 
 
 
-// --------------------------------------------------------
-// Write path FSM  (mirrors master's WR_REQ / WR_RESP style)
-// --------------------------------------------------------
-typedef enum logic [1:0] {
-    WR_IDLE,
-    WR_DATA,
-    WR_BRESP
-} wr_state_t;
-
-wr_state_t wr_state, wr_next;
-
-logic [AW-1:0] aw_lat;
+logic [AW-1:0] awaddr_reg;
 logic          aw_err;
+logic          aw_seen,w_seen;
+logic [DW-1:0]   wdata_reg;
+logic [DW/8-1:0] wstrb_reg;
+
+logic            bvalid_reg;
+logic [1:0]      bresp_reg;
+
+
+assign AWREADY = !aw_seen;
+assign WREADY  = !w_seen;
+
+assign BVALID  = bvalid_reg;
+assign BRESP   = bresp_reg;
+
+//logic write_fire;
+
+//assign write_fire = (aw_seen || (AWVALID && AWREADY)) &&   //because if  both W and AW signal come together then
+//                    (w_seen  || (WVALID && WREADY))   &&   //then because of nonblocking assignment w and aw seen wouldnt be updated
+//                    !bvalid_reg;                           //thus losing a cycle
 // Sequential
 always_ff @(posedge ACLK or negedge ARESETn) begin
     if (!ARESETn) begin
-        wr_state <= WR_IDLE;
-        aw_lat   <= '0;
-        aw_err   <= 1'b0;
-        for (int i = 0; i < N_REGS; i++) regs[i] <= '0;
+        aw_seen    <= 1'b0;
+        w_seen     <= 1'b0;
+
+        awaddr_reg <= '0;
+        wdata_reg  <= '0;
+        wstrb_reg  <= '0;
+
+        bvalid_reg <= 1'b0;
+        bresp_reg  <= OKAY;
+        aw_err     <= 1'b0;
+
+        for(int i=0;i<N_REGS;i++)
+            regs[i] <= '0;
     end else begin
-        wr_state <= wr_next;
+        if(AWVALID && AWREADY)
+        begin
+            aw_seen    <= 1'b1;
+            awaddr_reg <= AWADDR;
 
-        case (wr_state)
-            WR_IDLE: begin
-                if (AWVALID && AWREADY) begin
-                    aw_lat <= AWADDR;
-                    aw_err <= (AWADDR >= N_REGS*(DW/8));  //checks whether the address is out of range or not
-                end
+            aw_err <= (AWADDR >= N_REGS*(DW/8));
+        end
+        
+        if(WVALID && WREADY)
+        begin
+            w_seen    <= 1'b1;
+            wdata_reg <= WDATA;
+            wstrb_reg <= WSTRB;
+        end
+        
+        if(aw_seen && w_seen && !bvalid_reg)
+        begin
+
+            if(!aw_err)
+            begin
+                if (wstrb_reg[0]) regs[awaddr_reg[31:2]][ 7: 0]   <= wdata_reg[7:0];
+                if (wstrb_reg[1]) regs[awaddr_reg[31:2]][15: 8]  <= wdata_reg[15:8];
+                if (wstrb_reg[2]) regs[awaddr_reg[31:2]][23:16] <= wdata_reg[23:16];
+                if (wstrb_reg[3]) regs[awaddr_reg[31:2]][31:24] <= wdata_reg[31:24];
             end
+            bvalid_reg <= 1'b1;
+            bresp_reg  <= aw_err ? DECERR : OKAY;
+        end
+        
+        if(BVALID && BREADY)
+        begin
+            bvalid_reg <= 1'b0;
 
-            WR_DATA: begin
-                if (WVALID && WREADY && !aw_err) begin
-                    if (WSTRB[0]) regs[aw_lat[31:2]][7:0]   <= WDATA[7:0];
-                    if (WSTRB[1]) regs[aw_lat[31:2]][15:8]  <= WDATA[15:8];
-                    if (WSTRB[2]) regs[aw_lat[31:2]][23:16] <= WDATA[23:16];
-                    if (WSTRB[3]) regs[aw_lat[31:2]][31:24] <= WDATA[31:24];
-                end
-            end
-
-            default: ;
-        endcase
+            aw_seen <= 1'b0;
+            w_seen  <= 1'b0;
+            aw_err  <= 1'b0;
+        end
+        
     end
-end
-
-// Combinational
-always_comb begin
-    wr_next  = wr_state;
-    AWREADY  = 1'b0;
-    WREADY   = 1'b0;
-    BVALID   = 1'b0;
-    BRESP    = OKAY;
-
-    case (wr_state)
-        WR_IDLE: begin
-            AWREADY = 1'b1;
-            if (AWVALID &&  AWREADY)
-                wr_next = WR_DATA;
-        end
-
-        WR_DATA: begin
-            WREADY = 1'b1;
-            if (WVALID && WREADY) begin
-                wr_next = WR_BRESP;
-            end
-        end
-
-        WR_BRESP: begin
-            BVALID = 1'b1;
-            BRESP  = aw_err ? DECERR : OKAY;
-            if (BREADY && BVALID)
-                wr_next = WR_IDLE;
-        end
-
-        default: wr_next = WR_IDLE;
-    endcase
 end
 
 // --------------------------------------------------------
