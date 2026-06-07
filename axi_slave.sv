@@ -79,11 +79,30 @@ assign WREADY  = !w_seen;
 assign BVALID  = bvalid_reg;
 assign BRESP   = bresp_reg;
 
-//logic write_fire;
+logic [AW-1:0] write_addr;
+logic [DW-1:0] write_data;
+logic [DW/8-1:0] write_strb;
+logic current_aw_err;
 
-//assign write_fire = (aw_seen || (AWVALID && AWREADY)) &&   //because if  both W and AW signal come together then
-//                    (w_seen  || (WVALID && WREADY))   &&   //then because of nonblocking assignment w and aw seen wouldnt be updated
-//                    !bvalid_reg;                           //thus losing a cycle
+assign current_aw_err =
+       aw_seen
+       ? aw_err
+       : (AWADDR >= N_REGS*(DW/8));
+
+assign write_addr =
+        aw_seen ? awaddr_reg : AWADDR;
+
+assign write_data =
+        w_seen ? wdata_reg : WDATA;
+
+assign write_strb =
+        w_seen ? wstrb_reg : WSTRB;
+
+logic write_fire;
+
+assign write_fire = (aw_seen || (AWVALID && AWREADY)) &&   //Either I already saw the address/data earlier, 
+                    (w_seen  || (WVALID && WREADY))   &&   //OR I am seeing it right now
+                    !bvalid_reg;                           
 // Sequential
 always_ff @(posedge ACLK or negedge ARESETn) begin
     if (!ARESETn) begin
@@ -116,18 +135,18 @@ always_ff @(posedge ACLK or negedge ARESETn) begin
             wstrb_reg <= WSTRB;
         end
         
-        if(aw_seen && w_seen && !bvalid_reg)
+        if(write_fire)
         begin
 
-            if(!aw_err)
+            if(!current_aw_err)
             begin
-                if (wstrb_reg[0]) regs[awaddr_reg[31:2]][ 7: 0]   <= wdata_reg[7:0];
-                if (wstrb_reg[1]) regs[awaddr_reg[31:2]][15: 8]  <= wdata_reg[15:8];
-                if (wstrb_reg[2]) regs[awaddr_reg[31:2]][23:16] <= wdata_reg[23:16];
-                if (wstrb_reg[3]) regs[awaddr_reg[31:2]][31:24] <= wdata_reg[31:24];
+                if (write_strb[0]) regs[write_addr[31:2]][ 7: 0] <= write_data[7:0];
+                if (write_strb[1]) regs[write_addr[31:2]][15: 8] <= write_data[15:8];
+                if (write_strb[2]) regs[write_addr[31:2]][23:16] <= write_data[23:16];
+                if (write_strb[3]) regs[write_addr[31:2]][31:24] <= write_data[31:24];
             end
             bvalid_reg <= 1'b1;
-            bresp_reg  <= aw_err ? DECERR : OKAY;
+            bresp_reg  <= current_aw_err ? DECERR : OKAY;
         end
         
         if(BVALID && BREADY)
