@@ -19,8 +19,8 @@ module axi4lite_top #(
     input  logic [DW/8-1:0] wstrb,
     output logic [DW-1:0]   rdata,
     output logic            done,
-    output logic            err
-
+    output logic            err,
+    output logic [DW-1:0]   reg_out [0:N_REGS-1]
     // Register file visibility (tie off if not needed)
 );
 
@@ -85,7 +85,7 @@ axi4lite_slave #(
     .BRESP   (BRESP),   .BVALID  (BVALID),  .BREADY (BREADY),
     .ARADDR  (ARADDR),  .ARPROT  (ARPROT),  .ARVALID(ARVALID), .ARREADY(ARREADY),
     .RDATA   (RDATA),   .RRESP   (RRESP),   .RVALID (RVALID),  .RREADY (RREADY),
-    .reg_out ()
+    .reg_out (reg_out)
 );
 
 endmodule
